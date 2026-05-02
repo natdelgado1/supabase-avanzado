@@ -4,6 +4,8 @@ import { useState, useEffect } from "react";
 import { Post, Comment } from "./types";
 import { supabase } from "./lib/client";
 import { PostCard } from "./components/PostCard";
+import { NotificationBell } from "./components/NotificationBell";
+
 
 export default function Home() {
   const [loadingLikes, setLoadingLikes] = useState<Set<number | string>>(new Set());
@@ -18,59 +20,76 @@ export default function Home() {
     };
     getUser();
   }, []);
-  
 
-const handleLike = async (postId: number | string) => {
-  if (!currentUserId) return;
-  
-  // 🔒 Si ya está procesando este post, ignorar el clic
-  if (loadingLikes.has(postId)) return;
+  //Toggle like:insertar o eliminar de tablas likes dependiendo si ya le dio like o no, y actualizar el contador de likes en la UI
+  const handleLike = async (postId: number | string) => {
+    if (!currentUserId) return;
 
-  const post = posts.find((p) => p.id === postId);
-  if (!post) return;
+    // 🔒 Si ya está procesando este post, ignorar el clic
+    if (loadingLikes.has(postId)) return;
 
-  // Bloquear
-  setLoadingLikes((prev) => new Set(prev).add(postId));
+    const post = posts.find((p) => p.id === postId);
+    if (!post) return;
 
-  if (post.isLiked) {
-    const { error } = await supabase
-      .from("likes")
-      .delete()
-      .eq("user_id", currentUserId)
-      .eq("post_id", postId);
+    // Bloquear
+    setLoadingLikes((prev) => new Set(prev).add(postId));
 
-    if (!error) {
-      setPosts((prev) =>
-        prev.map((p) =>
-          p.id === postId
-            ? { ...p, isLiked: false, likes_count: p.likes_count - 1 }
-            : p
-        )
-      );
+    if (post.isLiked) {
+      const { error } = await supabase
+        .from("likes")
+        .delete()
+        .eq("user_id", currentUserId)
+        .eq("post_id", postId);
+
+      if (!error) {
+        setPosts((prev) =>
+          prev.map((p) =>
+            p.id === postId
+              ? { ...p, isLiked: false, likes_count: p.likes_count - 1 }
+              : p
+          )
+        );
+      }
+      //Crear notificación vía Edge Function (si el usuario que le dio like no es el dueño del post)
+      if (post.user_id !== currentUserId) {
+        supabase.functions.invoke("send-notification", {
+          body: {
+            type: "like",
+            post_id: postId,
+            actor_id: currentUserId,
+            post_owner_id: post.user_id
+          }
+        });
+      }
+
+
+    } else {
+      // Dar like — upsert ignora si ya existe
+      const { error } = await supabase
+        .from("likes")
+        .upsert(
+          { user_id: currentUserId, post_id: postId },
+          { onConflict: "user_id,post_id", ignoreDuplicates: true }
+        );
+
+      if (!error) {
+        setPosts((prev) =>
+          prev.map((p) =>
+            p.id === postId
+              ? { ...p, isLiked: true, likes_count: p.likes_count + 1 }
+              : p
+          )
+        );
+      }
     }
-  } else {
-    const { error } = await supabase
-      .from("likes")
-      .insert({ user_id: currentUserId, post_id: postId });
 
-    if (!error) {
-      setPosts((prev) =>
-        prev.map((p) =>
-          p.id === postId
-            ? { ...p, isLiked: true, likes_count: p.likes_count + 1 }
-            : p
-        )
-      );
-    }
-  }
-
-  // Desbloquear
-  setLoadingLikes((prev) => {
-    const next = new Set(prev);
-    next.delete(postId);
-    return next;
-  });
-};
+    // Desbloquear
+    setLoadingLikes((prev) => {
+      const next = new Set(prev);
+      next.delete(postId);
+      return next;
+    });
+  };
 
   // Agregar comentario
   const handleComment = async (postId: number | string, body: string) => {
@@ -106,7 +125,20 @@ const handleLike = async (postId: number | string) => {
         )
       );
 
-      // Enviar email al titular del post (si no es el mismo usuario)
+      //Notificar al titular del post (si no es el mismo usuario)
+      if (post.user_id !== currentUserId) {
+        supabase.functions.invoke("send-notification", {
+          body: {
+            type: "comment",
+            post_id: postId,
+            actor_id: currentUserId,
+            post_owner_id: post.user_id,
+            comment_body: body
+          }
+        });
+      }
+
+      // Enviar email al titular del post (si no es el mismo usuario)      
       if (post.user_id !== currentUserId) {
         fetch("/api/send-comment-email", {
           method: "POST",
@@ -140,7 +172,7 @@ const handleLike = async (postId: number | string) => {
       const postIds = postsData.map((p) => p.id);
       const userIds = [...new Set(postsData.map((p) => p.user_id))];
       console.log("Posts: ", postsData);
-      
+
 
       // 2. Obtener profiles
       const { data: profilesData } = await supabase
@@ -224,23 +256,26 @@ const handleLike = async (postId: number | string) => {
     <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="sticky top-0 z-50 bg-card-bg border-b border-border">
-        <div className="max-w-lg mx-auto px-4 py-3 flex items-center justify-center">
+        <div className="max-w-lg mx-auto px-4 py-3 flex items-center justify-between">
+          <div className="w-10"></div>
           <h1 className="text-2xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
             Suplatzigram
           </h1>
+          <NotificationBell />
         </div>
       </header>
 
       {/* Feed de posts */}
       <main className="max-w-lg mx-auto px-4 py-6">
         <div className="flex flex-col gap-6">
-          {posts.map((post) =>   (  
+          {posts.map((post) => (
             <PostCard
               key={post.id}
               post={post}
               currentUserId={currentUserId}
               onLike={handleLike}
               onComment={handleComment}
+              isLikeLoading={loadingLikes.has(post.id)} // 👈
             />
           ))}
         </div>

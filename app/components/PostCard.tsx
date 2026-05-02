@@ -8,7 +8,7 @@ import { HeartIcon } from "./HeartIcon";
 
 const DEFAULT_AVATAR = "https://xynshcnkxdliapebmyaz.supabase.co/storage/v1/object/public/images/posts/unnamed-14.jpg";
 
-export function PostCard({ post, currentUserId, onLike, onComment }: PostCardProps) {
+export function PostCard({ post, currentUserId, onLike, onComment, isLikeLoading }: PostCardProps) {
   const [commentText, setCommentText] = useState("");
   const [showComments, setShowComments] = useState(false);
 
@@ -65,10 +65,12 @@ export function PostCard({ post, currentUserId, onLike, onComment }: PostCardPro
         {/* Botones de like y comentario */}
         <div className="flex items-center gap-4">
           <button
-            onClick={() => currentUserId && onLike(post.id)}
-            className={`hover:scale-110 transition-transform active:scale-95 ${!currentUserId ? 'opacity-50 cursor-not-allowed' : ''}`}
+            onClick={() => currentUserId && !isLikeLoading && onLike(post.id)}
+            className={`hover:scale-110 transition-transform active:scale-95 ${
+              !currentUserId || isLikeLoading ? "opacity-50 cursor-not-allowed" : ""
+            }`}
             aria-label={post.isLiked ? "Quitar like" : "Dar like"}
-            disabled={!currentUserId}
+            disabled={!currentUserId || isLikeLoading}
           >
             <HeartIcon filled={post.isLiked || false} />
           </button>
@@ -111,7 +113,7 @@ export function PostCard({ post, currentUserId, onLike, onComment }: PostCardPro
             onClick={() => setShowComments(!showComments)}
             className="text-foreground/50 text-sm mt-2 hover:text-foreground/70"
           >
-            Ver {post.comments.length} comentario{post.comments.length !== 1 ? 's' : ''}
+            Ver {post.comments.length} comentario{post.comments.length !== 1 ? "s" : ""}
           </button>
         )}
 
@@ -151,4 +153,4 @@ export function PostCard({ post, currentUserId, onLike, onComment }: PostCardPro
       </div>
     </article>
   );
-} 
+}

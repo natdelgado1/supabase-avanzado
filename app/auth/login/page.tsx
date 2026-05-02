@@ -23,6 +23,15 @@ export default function LoginPage() {
 
       if (error) throw error;
 
+      // Obtener datos del usuario logueado
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      const metadata = user?.user_metadata;
+
+      console.log("👤 Usuario logueado:", user);
+      console.log("📋 Metadata:", metadata);
+
       setMessage({ type: "success", text: "¡Inicio de sesión exitoso!" });
     } catch (error) {
       setMessage({

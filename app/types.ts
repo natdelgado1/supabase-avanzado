@@ -30,4 +30,5 @@ export interface PostCardProps {
   currentUserId: string | null;
   onLike: (postId: number | string) => void;
   onComment: (postId: number | string, body: string) => void;
+  isLikeLoading: boolean; // Nuevo prop para indicar si el like está en proceso
 }

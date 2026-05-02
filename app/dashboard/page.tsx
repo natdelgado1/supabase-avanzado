@@ -119,7 +119,7 @@ export default function DashboardPage() {
           setStats((prev) => ({ ...prev, likes: Math.max(0, prev.likes - 1) }));
         }
       )
-      .subscribe();
+      .subscribe(); //Sirve para que cualquier frontend conectado reciba la actualización
 
     // Canal para comments
     const commentsChannel = supabase
